@@ -1,0 +1,149 @@
+import os
+import logging
+import tempfile
+import shutil
+import argparse
+import pandas as pd
+
+import torch
+from PIL import Image
+from diffusers import StableDiffusionPipeline, StableDiffusionXLPipeline
+from diffusers import (
+    DDPMScheduler,
+    DDIMScheduler,
+    EulerDiscreteScheduler,
+    EulerAncestralDiscreteScheduler,
+)
+
+# TODO(ahmadki):
+# batched inference
+# resize resolution
+
+parser = argparse.ArgumentParser()
+parser.add_argument('--model-id', default='2', type=str)
+parser.add_argument('--precision', default='16', type=str)
+parser.add_argument('--base-output-dir', default="./output", type=str)
+parser.add_argument('--output-dir-name', default=None, type=str)
+parser.add_argument('--output-dir-name-postfix', default=None, type=str)
+parser.add_argument('--guidance', default=8.0, type=float)
+parser.add_argument('--scheduler', default="ddim", type=str)
+parser.add_argument('--steps', default=50, type=int)
+parser.add_argument('--resize', default=True, type=bool)
+args = parser.parse_args()
+
+# Init the logger
+logging.basicConfig(
+    format='%(asctime)s %(levelname)-8s %(message)s',
+    level=logging.INFO,
+    datefmt='%Y-%m-%d %H:%M:%S'
+)
+
+if args.model_id == "2":
+    args.model_id = "stabilityai/stable-diffusion-2-1"
+elif args.model_id == "xl":
+    args.model_id = "stabilityai/stable-diffusion-xl-base-1.0"
+else:
+    raise ValueError(f"{args.model_id} is not a valid model id")
+
+# Initialize defaults
+device = torch.device('cpu')
+world_size = 1
+rank = 0
+
+# Check for CUDA availability
+if torch.cuda.is_available():
+    # Check for distributed environment variables
+    local_rank = int(os.environ.get("LOCAL_RANK", 0))
+    world_size = int(os.environ.get("WORLD_SIZE", 1))
+
+    if world_size > 1:
+        # Initialize distributed process group
+        torch.distributed.init_process_group(backend='nccl', init_method='env://')
+        torch.cuda.set_device(local_rank)
+        rank = torch.distributed.get_rank()
+
+    device = torch.device('cuda', local_rank)
+
+logging.info(f"[{rank}] args: {args}")
+logging.info(f"[{rank}] world_size: {world_size}")
+logging.info(f"[{rank}] device: {device}")
+
+# read captions from captions.tsv
+captions_file = "captions.tsv"
+df = pd.read_csv(captions_file, sep='\t')
+logging.info(f"[{rank}] {len(df)} captions loaded")
+
+# split captions among ranks
+df = df[rank::world_size]
+logging.info(f"[{rank}] {len(df)} captions assigned")
+
+# Build the pipeline
+schedulers = {
+    "ddpm": DDPMScheduler.from_pretrained(args.model_id, subfolder="scheduler"),
+    "ddim": DDIMScheduler.from_pretrained(args.model_id, subfolder="scheduler"),
+    "euler_anc": EulerAncestralDiscreteScheduler.from_pretrained(args.model_id, subfolder="scheduler"),
+    "euler": EulerDiscreteScheduler.from_pretrained(args.model_id, subfolder="scheduler"),
+}
+if args.model_id == "stabilityai/stable-diffusion-2-1":
+    pipe = StableDiffusionPipeline.from_pretrained("stabilityai/stable-diffusion-2-1",
+                                                   scheduler=schedulers[args.scheduler],
+                                                   safety_checker=None,
+                                                   add_watermarker=False,
+                                                   variant="non_ema",
+                                                   torch_dtype=torch.float16 if args.precision == '16' else torch.float32)
+else:
+    pipe = StableDiffusionXLPipeline.from_pretrained("stabilityai/stable-diffusion-xl-base-1.0",
+                                                     scheduler=schedulers[args.scheduler],
+                                                     safety_checker=None,
+                                                     add_watermarker=False,
+                                                     variant="fp16" if args.precision == '16' else None,
+                                                     torch_dtype=torch.float16 if args.precision == '16' else torch.float32)
+pipe = pipe.to(device)
+pipe.set_progress_bar_config(disable=True)
+logging.info(f"[{rank}] Pipeline initialized: {pipe}")
+
+# Output directory
+output_dir = args.output_dir_name or f"{args.model_id.replace('/','--')}__{args.scheduler}__{args.steps}__{args.guidance}__{args.precision}"
+if args.output_dir_name_postfix is not None:
+    output_dir = f"{output_dir}_{args.output_dir_name_postfix}"
+
+full_output_dir = os.path.join(args.base_output_dir, output_dir)
+resized_output_dir = os.path.join(f"{args.base_output_dir}_512", output_dir)
+
+# Ensure the output directory exists
+if not os.path.exists(full_output_dir):
+    os.makedirs(full_output_dir)
+if args.resize and not os.path.exists(resized_output_dir):
+    os.makedirs(resized_output_dir)
+
+# Create a temporary directory to atomically move the images
+tmp_dir = tempfile.mkdtemp()
+
+# Generate the images
+for index, row in df.iterrows():
+    image_id = row['image_id']
+    caption_id = row['id']
+    caption_text = row['caption']
+
+    full_destination_path = os.path.join(full_output_dir, f"{caption_id}.png")
+    resized_destination_path = os.path.join(resized_output_dir, f"{caption_id}.png")
+
+    # Check if the image already exists in the output directory
+    if not os.path.exists(full_destination_path) or (args.resize and not os.path.exists(resized_destination_path)):
+        # Generate the image
+        image = pipe(caption_text,
+                     guidance_scale=args.guidance,
+                     num_inference_steps=args.steps).images[0]
+
+        # Save the full resolution image
+        image_path_tmp = os.path.join(tmp_dir, f"{caption_id}.png")
+        image.save(image_path_tmp)
+        shutil.move(image_path_tmp, full_destination_path)
+
+        # Resize the image tensor
+        resized_image_tensor = image.resize((512,512), Image.Resampling.BILINEAR)
+        image_path_tmp = os.path.join(tmp_dir, f"{caption_id}.png")
+        resized_image_tensor.save(image_path_tmp)
+        shutil.move(image_path_tmp, resized_destination_path)
+
+        logging.info(f"[{rank}] Saved image {caption_id}: {caption_text}")
