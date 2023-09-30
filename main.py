@@ -7,7 +7,7 @@ import pandas as pd
 
 import torch
 from PIL import Image
-from diffusers import StableDiffusionPipeline, StableDiffusionXLPipeline
+from diffusers import StableDiffusionPipeline, StableDiffusionXLPipeline, StableDiffusionXLImg2ImgPipeline
 from diffusers import (
     DDPMScheduler,
     DDIMScheduler,
@@ -20,7 +20,7 @@ from diffusers import (
 # resize resolution
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--model-id', default='2', type=str)
+parser.add_argument('--model-id', default='xl', type=str)
 parser.add_argument('--precision', default='16', type=str)
 parser.add_argument('--base-output-dir', default="./output", type=str)
 parser.add_argument('--output-dir-name', default=None, type=str)
@@ -29,6 +29,13 @@ parser.add_argument('--guidance', default=8.0, type=float)
 parser.add_argument('--scheduler', default="ddim", type=str)
 parser.add_argument('--steps', default=50, type=int)
 parser.add_argument('--resize', default=True, type=bool)
+parser.add_argument("--refiner", dest='refiner', action="store_true",
+                    help="Whether to add a refiner to the SDXL pipeline."
+                          "Applicable only with --model-id=xl")
+parser.add_argument("--no-refiner", dest='refiner', action="store_false",
+                    help="Whether to add a refiner to the SDXL pipeline."
+                          "Applicable only with --model-id=xl")
+
 args = parser.parse_args()
 
 # Init the logger
@@ -98,23 +105,35 @@ else:
                                                      add_watermarker=False,
                                                      variant="fp16" if args.precision == '16' else None,
                                                      torch_dtype=torch.float16 if args.precision == '16' else torch.float32)
+    if args.refiner:
+        args.model_id = "stabilityai/stable-diffusion-xl-refiner-1.0"
+        refiner_pipe = StableDiffusionXLImg2ImgPipeline.from_pretrained(args.model_id,
+                                                                        scheduler=schedulers[args.scheduler],
+                                                                        safety_checker=None,
+                                                                        add_watermarker=False,
+                                                                        variant="fp16" if args.precision == '16' else None,
+                                                                        torch_dtype=torch.float16 if args.precision == '16' else torch.float32)
+
+
 pipe = pipe.to(device)
 pipe.set_progress_bar_config(disable=True)
 logging.info(f"[{rank}] Pipeline initialized: {pipe}")
+
+if args.refiner:
+    refiner_pipe = refiner_pipe.to(device)
+    refiner_pipe.set_progress_bar_config(disable=True)
+    logging.info(f"[{rank}] Refiner pipeline initialized: {refiner_pipe}")
 
 # Output directory
 output_dir = args.output_dir_name or f"{args.model_id.replace('/','--')}__{args.scheduler}__{args.steps}__{args.guidance}__{args.precision}"
 if args.output_dir_name_postfix is not None:
     output_dir = f"{output_dir}_{args.output_dir_name_postfix}"
 
-full_output_dir = os.path.join(args.base_output_dir, output_dir)
-resized_output_dir = os.path.join(f"{args.base_output_dir}_512", output_dir)
+output_dir = os.path.join(args.base_output_dir, output_dir)
 
 # Ensure the output directory exists
-if not os.path.exists(full_output_dir):
-    os.makedirs(full_output_dir)
-if args.resize and not os.path.exists(resized_output_dir):
-    os.makedirs(resized_output_dir)
+if not os.path.exists(output_dir):
+    os.makedirs(output_dir)
 
 # Create a temporary directory to atomically move the images
 tmp_dir = tempfile.mkdtemp()
@@ -125,25 +144,23 @@ for index, row in df.iterrows():
     caption_id = row['id']
     caption_text = row['caption']
 
-    full_destination_path = os.path.join(full_output_dir, f"{caption_id}.png")
-    resized_destination_path = os.path.join(resized_output_dir, f"{caption_id}.png")
+    destination_path = os.path.join(output_dir, f"{caption_id}.png")
 
     # Check if the image already exists in the output directory
-    if not os.path.exists(full_destination_path) or (args.resize and not os.path.exists(resized_destination_path)):
+    if not os.path.exists(destination_path):
         # Generate the image
         image = pipe(caption_text,
                      guidance_scale=args.guidance,
                      num_inference_steps=args.steps).images[0]
 
-        # Save the full resolution image
+        if args.refiner:
+            image = refiner_pipe(caption_text,
+                                 image=image,
+                                 num_inference_steps=20).images[0]
+
+        # Save the image
         image_path_tmp = os.path.join(tmp_dir, f"{caption_id}.png")
         image.save(image_path_tmp)
-        shutil.move(image_path_tmp, full_destination_path)
-
-        # Resize the image tensor
-        resized_image_tensor = image.resize((512,512), Image.Resampling.BILINEAR)
-        image_path_tmp = os.path.join(tmp_dir, f"{caption_id}.png")
-        resized_image_tensor.save(image_path_tmp)
-        shutil.move(image_path_tmp, resized_destination_path)
+        shutil.move(image_path_tmp, destination_path)
 
         logging.info(f"[{rank}] Saved image {caption_id}: {caption_text}")
