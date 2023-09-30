@@ -6,7 +6,6 @@ import argparse
 import pandas as pd
 
 import torch
-from PIL import Image
 from diffusers import StableDiffusionPipeline, StableDiffusionXLPipeline, StableDiffusionXLImg2ImgPipeline
 from diffusers import (
     DDPMScheduler,
@@ -17,7 +16,6 @@ from diffusers import (
 
 # TODO(ahmadki):
 # batched inference
-# resize resolution
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--model-id', default='xl', type=str)
@@ -155,8 +153,7 @@ for index, row in df.iterrows():
 
         if args.refiner:
             image = refiner_pipe(caption_text,
-                                 image=image,
-                                 num_inference_steps=20).images[0]
+                                 image=image).images[0]
 
         # Save the image
         image_path_tmp = os.path.join(tmp_dir, f"{caption_id}.png")

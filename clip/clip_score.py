@@ -33,15 +33,14 @@ for id, caption in zip(df['id'], df['caption']):
     # Load the image
     image_path = os.path.join(args.image_folder, f"{id}.png")
     image = Image.open(image_path).convert("RGB")
-    
+
     # Calculate the CLIP score using the given class method
     clip_score = clip_encoder.get_clip_score(caption, image)
-    
+
     # Store the CLIP score
     clip_scores.append(clip_score.item())
 
 # Print the calculated CLIP scores
-print(clip_scores)
 print(f"Number of image-caption pairs: {len(clip_scores)}")
 final_clip_score = np.mean(clip_scores)
 print(f"Final CLIP Score for the {args.image_folder} dataset: {final_clip_score}")
