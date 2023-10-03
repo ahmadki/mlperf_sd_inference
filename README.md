@@ -1,39 +1,113 @@
-# Stable Diffusion inference
-This is an experimental stable diffusion inference repository that is used to test and evaluate the model as for a new benchmark for MLPerf inference.
+# Stable Diffusion Inference
 
-[Diffusers](https://huggingface.co/docs/diffusers/index)
+Welcome to the experimental stable diffusion inference repository. This repository aims to test and evaluate the model as a new benchmark candidate for [MLPerf inference](https://mlcommons.org/en/) .
 
-[MLPerf-SSD](https://github.com/mlcommons/training/tree/master/single_stage_detector/ssd)
+## References
+- [Diffusers Documentation](https://huggingface.co/docs/diffusers/index)
+- [MLPerf-SSD](https://github.com/mlcommons/training/tree/master/single_stage_detector/ssd)
+- [MLCommons](https://mlcommons.org/en/)
 
-[MLCommons](https://mlcommons.org/en/)
+## Getting Started
+### 1. Setting Up the Environment
 
-## Usage instructions
+To set up the environment, build and launch the container using the following commands:
 
-*This README is a WIP. The build and run scripts and instructions will be improved in the coming weeks*
-
-### Build the container
-build and launch the container:
 ```bash
 docker build . -t sd_mlperf_inference
-```
-You will want to `change target_docker_image` in `./scripts/docker/config.sh`
-
-### Prepare the dataset
-(The annotations are provided with the repository, `captions_val2014.json`)
-Download the coco-2014 validation annotations.
-```bash
-./scripts/download_annotations.sh
+docker run --rm -it --gpus=all -v {PWD}:/workspace sd_mlperf_inference bash
 ```
 
-(The processes annotations in tsv format is provided with the repository `captions.tsv`)
-The original annotations are provided in json format, include over 200k captions (multiple captions per image) and include additional information that is not relevant to the benchmark.
+**Note** : The subsequent commands are assumed to be executed within this container.
 
-Run the following script to extract a subset of captions and save them to a tsv file.
+### 2. Dataset Overview
+This repository leverages the `coco-2014` validation set for image generation and computation of FID and CLIP scores. [COCO (Common Objects in Context)](https://cocodataset.org/) is a diverse dataset instrumental for object detection, segmentation, and captioning tasks. It boasts a substantial validation set with over 40,000 images encompassing more than 200,000 labels.
+
+For benchmarking purposes, we utilize a random subset of {TBD} images and their associated labels, determined by a preset seed of {TBD}. As the focus is on image generation from labels and subsequent score calculation, downloading the entire COCO dataset is unnecessary. The required files for the benchmark, already part of the repository:
+- `captions.tsv`: Contains processed coco2014 validation annotations with 40,504 prompts and their respective IDs. Essential for image generation and CLIP scoring.
+- `val2014.npz`: Consists of precomputed statistics of the coco2014 validation set. Utilized for FID scoring.
+
+For details on file generation, refer to **Appendix A** .
+
+
+### 3. Image Generation
+Execute the `main.py` script to generate images:
+
 ```bash
-./scripts/extra_annotations.sh
+python main.py \
+    --model-id 2 \         # xl for SD-XL, xlr for SD-XL + Refiner
+    --guidance 8.0 \
+    --precision 16 \
+    --scheduler ddim \
+    --steps 50
 ```
 
-If necessary, Download MS-COCO-2014 validation images. This is necessary only if you need to calculate the FID. Even then, the activation weights will be provided in the final reference.
+For additional execution options:
+
 ```bash
-./scripts/download_dataset.sh
+python main.py --help
+```
+
+
+### 4. Compute FID Score
+
+```bash
+python fid/fid_score.py \
+    --batch-size 1 \                 # batch size for the inception network. keep it 1.
+    --subset-size 35000 \            # validation subset size, if you want to score the full dataset don't set the argument
+    --shuffle-seed 2023 \            # the seed used for random the random subset selection
+    ./val2014.npz \                  # ground truth (coco 2014 validation) statistics
+    ./output                         # folder with the generated images
+```
+
+For more options:
+```bash
+python fid/fid_score.py --help
+```
+
+
+### 5. Compute CLIP Score
+
+```bash
+python clip/clip_score.py \
+    --subset-size 35000 \          # validation subset size, if you want to score the full dataset don't set the argument
+    --shuffle-seed 2023 \          # the seed used for random the random subset selection
+    --tsv-file captions.tsv \      # captions file
+    --image-folder output          # Folder with the generated images
+```
+
+For more options:
+
+```bash
+python clip/clip_score.py --help
+```
+
+
+## Appendix A: Generating Dataset Files
+
+To create the `captions.tsv` and `val2014.npz` files:
+1. Download the coco2014 validation set:
+
+```bash
+scripts/coco-2014-validation-download.sh
+```
+
+
+1. Process the downloaded annotations (provided in JSON format):
+
+```bash
+python process-coco-annotations.py \
+    --input-captions-file {PATH_TO_COCO_ANNOTATIONS_FILE} \                 # Input annotations file
+    --output-tsv-file captions.tsv \                                        # Output annotations
+    --allow-duplicate-images                                                # Pick one prompt per image
+```
+
+
+1. Generate ground truth statistics:
+
+```bash
+
+python fid/fid_score.py \
+    --batch-size 1 \                      # inception network batch size
+    --save-stats {COCO_2014_IMAGES} \     # Input folder with coco images
+    val2014.npz                           # Output file
 ```
