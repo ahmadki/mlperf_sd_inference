@@ -29,12 +29,13 @@ if args.subset_size:
 
 # Calculate the CLIP score for each image-caption pair
 clip_scores = []
+# Only compute CLIP Scores using generated images (To enable CLIP score computation for partial runs)
 id_list = [int(d.split(".")[0]) for d in os.listdir(args.image_folder)]
 for id, caption in zip(df['id'], df['caption']):
-    # Load the image
+    # Check whether sample ID is generated
     if id in id_list:
+       # Load the image
        image_path = os.path.join(args.image_folder, f"{id}.png")
-       
        image = Image.open(image_path).convert("RGB")
        clip_score = clip_encoder.get_clip_score(caption, image)
 
