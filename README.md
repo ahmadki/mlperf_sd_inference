@@ -36,7 +36,7 @@ Execute the `main.py` script to generate images:
 python main.py \
     --model-id 2 \         # xl for SD-XL, xlr for SD-XL + Refiner
     --guidance 8.0 \
-    --precision 16 \
+    --precision fp16 \     # fp16, bf16 and fp32
     --scheduler ddim \
     --steps 50
 ```
@@ -72,7 +72,8 @@ python clip/clip_score.py \
     --subset-size 35000 \          # validation subset size, if you want to score the full dataset don't set the argument
     --shuffle-seed 2023 \          # the seed used for random the random subset selection
     --tsv-file captions.tsv \      # captions file
-    --image-folder output          # Folder with the generated images
+    --image-folder ./output          # Folder with the generated images
+    --device cuda                  # Device in which CLIP model is run (cpu, cuda)  
 ```
 
 For more options:

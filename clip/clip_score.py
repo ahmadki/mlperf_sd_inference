@@ -11,12 +11,13 @@ parser.add_argument('--tsv-file', type=str, required=True, help='Path to the TSV
 parser.add_argument('--image-folder', type=str, required=True, help='Path to the folder containing image files')
 parser.add_argument('--subset-size', type=int, help='Size of the random subset of data to run the score on', default=None)
 parser.add_argument('--shuffle-seed', type=int, help='Seed to pick the random data', default=None)
+parser.add_argument('--device', type=str, help='Device to which the model is moved', default='cpu')
 
 # Parse the arguments
 args = parser.parse_args()
 
 # Instantiate the CLIPEncoder
-clip_encoder = CLIPEncoder()
+clip_encoder = CLIPEncoder(device=args.device)
 
 # Read the TSV file using pandas and store the captions and corresponding image ids
 df = pd.read_csv(args.tsv_file, sep='\t')
@@ -28,17 +29,17 @@ if args.subset_size:
 
 # Calculate the CLIP score for each image-caption pair
 clip_scores = []
-
+id_list = [int(d.split(".")[0]) for d in os.listdir(args.image_folder)]
 for id, caption in zip(df['id'], df['caption']):
     # Load the image
-    image_path = os.path.join(args.image_folder, f"{id}.png")
-    image = Image.open(image_path).convert("RGB")
+    if id in id_list:
+       image_path = os.path.join(args.image_folder, f"{id}.png")
+       
+       image = Image.open(image_path).convert("RGB")
+       clip_score = clip_encoder.get_clip_score(caption, image)
 
-    # Calculate the CLIP score using the given class method
-    clip_score = clip_encoder.get_clip_score(caption, image)
-
-    # Store the CLIP score
-    clip_scores.append(clip_score.item())
+    	# Store the CLIP score
+       clip_scores.append(100*clip_score.item())
 
 # Print the calculated CLIP scores
 print(f"Number of image-caption pairs: {len(clip_scores)}")

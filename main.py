@@ -50,6 +50,13 @@ elif args.model_id == "xl":
 else:
     raise ValueError(f"{args.model_id} is not a valid model id")
 
+if args.precision == "fp16":
+    dtype = torch.float16
+elif args.precision == "bf16":
+    dtype = torch.bfloat16
+else:
+    dtype = torch.float32
+
 # Initialize defaults
 device = torch.device('cpu')
 world_size = 1
@@ -95,22 +102,22 @@ if args.model_id == "stabilityai/stable-diffusion-2-1":
                                                    safety_checker=None,
                                                    add_watermarker=False,
                                                    variant="non_ema",
-                                                   torch_dtype=torch.float16 if args.precision == '16' else torch.float32)
+                                                   torch_dtype=dtype)
 else:
     pipe = StableDiffusionXLPipeline.from_pretrained("stabilityai/stable-diffusion-xl-base-1.0",
                                                      scheduler=schedulers[args.scheduler],
                                                      safety_checker=None,
                                                      add_watermarker=False,
-                                                     variant="fp16" if args.precision == '16' else None,
-                                                     torch_dtype=torch.float16 if args.precision == '16' else torch.float32)
+                                                     variant="fp16" if args.precision == 'fp16' else None,
+                                                     torch_dtype=dtype)
     if args.refiner:
         args.model_id = "stabilityai/stable-diffusion-xl-refiner-1.0"
         refiner_pipe = StableDiffusionXLImg2ImgPipeline.from_pretrained(args.model_id,
                                                                         scheduler=schedulers[args.scheduler],
                                                                         safety_checker=None,
                                                                         add_watermarker=False,
-                                                                        variant="fp16" if args.precision == '16' else None,
-                                                                        torch_dtype=torch.float16 if args.precision == '16' else torch.float32)
+                                                                        variant="fp16" if args.precision == 'fp16' else None,
+                                                                        torch_dtype=dtype)
 
 
 pipe = pipe.to(device)
