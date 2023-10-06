@@ -1,4 +1,5 @@
 import os
+import logging
 import argparse
 import pandas as pd
 from PIL import Image
@@ -31,6 +32,7 @@ if args.subset_size:
 clip_scores = []
 # Only compute CLIP Scores using generated images (To enable CLIP score computation for partial runs)
 id_list = [int(d.split(".")[0]) for d in os.listdir(args.image_folder)]
+num_clip_images = 0
 for id, caption in zip(df['id'], df['caption']):
     # Check whether sample ID is generated
     if id in id_list:
@@ -41,6 +43,11 @@ for id, caption in zip(df['id'], df['caption']):
 
     	# Store the CLIP score
        clip_scores.append(100*clip_score.item())
+       num_clip_images+=1
+
+if num_clip_images<len(df):
+    logging.warning("{} images missing from output folder".format(len(df)-num_clip_images))
+
 
 # Print the calculated CLIP scores
 print(f"Number of image-caption pairs: {len(clip_scores)}")
