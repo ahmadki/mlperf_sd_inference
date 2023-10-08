@@ -27,7 +27,7 @@ class CLIPEncoder(nn.Module):
                  clip_version: str = 'ViT-B/32',
                  pretrained: Optional[str] = '',
                  cache_dir: Optional[str] = None,
-                 device: str = 'cuda'):
+                 device: str = 'cpu'):
         """
         Initializes the CLIPEncoder with the specified CLIP model version and pre-trained weights.
         
