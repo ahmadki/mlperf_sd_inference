@@ -26,6 +26,8 @@ parser.add_argument('--output-dir-name-postfix', default=None, type=str)
 parser.add_argument('--guidance', default=8.0, type=float)
 parser.add_argument('--scheduler', default="ddim", type=str)
 parser.add_argument('--steps', default=50, type=int)
+parser.add_argument('--negative-prompt', default=None, type=str)
+parser.add_argument('--generator-seed', default=None, type=int)
 parser.add_argument('--resize', default=True, type=bool)
 parser.add_argument("--refiner", dest='refiner', action="store_true",
                     help="Whether to add a refiner to the SDXL pipeline."
@@ -154,8 +156,10 @@ for index, row in df.iterrows():
     # Check if the image already exists in the output directory
     if not os.path.exists(destination_path):
         # Generate the image
-        image = pipe(caption_text,
+        image = pipe(prompt=caption_text,
+                     negative_prompt=args.negative_prompt,
                      guidance_scale=args.guidance,
+                     generator=torch.Generator(device=device).manual_seed(args.generator_seed) if args.generator_seed else None,
                      num_inference_steps=args.steps).images[0]
 
         if args.refiner:
