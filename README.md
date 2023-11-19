@@ -34,11 +34,12 @@ Execute the `main.py` script to generate images:
 
 ```bash
 python main.py \
-    --model-id 2 \         # xl for SD-XL, xlr for SD-XL + Refiner
+    --model-id xl \         # xl for SD-XL, xlr for SD-XL + Refiner
     --guidance 8.0 \
     --precision fp16 \     # fp16, bf16 and fp32
-    --scheduler ddim \
-    --steps 50
+    --scheduler euler \
+    --steps 20 \
+    --latent-path <PATH TO LATENTS TENSOR FILE> 
 ```
 
 For additional execution options:

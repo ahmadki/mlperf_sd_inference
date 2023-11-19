@@ -27,6 +27,7 @@ parser.add_argument('--guidance', default=8.0, type=float)
 parser.add_argument('--scheduler', default="ddim", type=str)
 parser.add_argument('--steps', default=50, type=int)
 parser.add_argument('--negative-prompt', default=None, type=str)
+parser.add_argument('--latent-path',default=None,type=str)
 parser.add_argument('--generator-seed', default=None, type=int)
 parser.add_argument('--resize', default=True, type=bool)
 parser.add_argument("--refiner", dest='refiner', action="store_true",
@@ -77,6 +78,9 @@ if torch.cuda.is_available():
         rank = torch.distributed.get_rank()
 
     device = torch.device('cuda', local_rank)
+
+# load frozen latent
+latent_noise = torch.load(args.latent_path).to(dtype)
 
 logging.info(f"[{rank}] args: {args}")
 logging.info(f"[{rank}] world_size: {world_size}")
@@ -159,7 +163,7 @@ for index, row in df.iterrows():
         image = pipe(prompt=caption_text,
                      negative_prompt=args.negative_prompt,
                      guidance_scale=args.guidance,
-                     generator=torch.Generator(device=device).manual_seed(args.generator_seed) if args.generator_seed else None,
+                     latents=latent_noise,
                      num_inference_steps=args.steps).images[0]
 
         if args.refiner:
