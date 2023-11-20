@@ -23,6 +23,7 @@ parser.add_argument('--precision', default='16', type=str)
 parser.add_argument('--base-output-dir', default="./output", type=str)
 parser.add_argument('--output-dir-name', default=None, type=str)
 parser.add_argument('--output-dir-name-postfix', default=None, type=str)
+parser.add_argument('--captions-fname', default="captions_5k.tsv", type=str)
 parser.add_argument('--guidance', default=8.0, type=float)
 parser.add_argument('--scheduler', default="ddim", type=str)
 parser.add_argument('--steps', default=50, type=int)
@@ -93,9 +94,8 @@ logging.info(f"[{rank}] args: {args}")
 logging.info(f"[{rank}] world_size: {world_size}")
 logging.info(f"[{rank}] device: {device}")
 
-# read captions from captions.tsv
-captions_file = "captions.tsv"
-df = pd.read_csv(captions_file, sep='\t')
+logging.info(f"[{rank}] using captions from: {args.captions_fname}")
+df = pd.read_csv(args.captions_fname, sep='\t')
 logging.info(f"[{rank}] {len(df)} captions loaded")
 
 # split captions among ranks
