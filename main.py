@@ -23,11 +23,12 @@ parser.add_argument('--precision', default='16', type=str)
 parser.add_argument('--base-output-dir', default="./output", type=str)
 parser.add_argument('--output-dir-name', default=None, type=str)
 parser.add_argument('--output-dir-name-postfix', default=None, type=str)
+parser.add_argument('--captions-fname', default="captions_5k.tsv", type=str)
 parser.add_argument('--guidance', default=8.0, type=float)
-parser.add_argument('--scheduler', default="ddim", type=str)
+parser.add_argument('--scheduler', default="euler", type=str)
 parser.add_argument('--steps', default=50, type=int)
 parser.add_argument('--negative-prompt', default=None, type=str)
-parser.add_argument('--latent-path',default=None,type=str)
+parser.add_argument('--latent-path',default=None, type=str)
 parser.add_argument('--generator-seed', default=None, type=int)
 parser.add_argument('--resize', default=True, type=bool)
 parser.add_argument("--refiner", dest='refiner', action="store_true",
@@ -45,6 +46,11 @@ logging.basicConfig(
     level=logging.INFO,
     datefmt='%Y-%m-%d %H:%M:%S'
 )
+
+if args.latent_path and args.generator_seed:
+    raise ValueError(
+        "Cannot specify both --latent-path and --generator-seed"
+    )
 
 if args.model_id == "2":
     args.model_id = "stabilityai/stable-diffusion-2-1"
@@ -80,15 +86,17 @@ if torch.cuda.is_available():
     device = torch.device('cuda', local_rank)
 
 # load frozen latent
-latent_noise = torch.load(args.latent_path).to(dtype)
+latent_noise = None
+if args.latent_path:
+    logging.info(f"[{rank}] loading latent from: {args.latent_path}")
+    latent_noise = torch.load(args.latent_path).to(dtype)
 
 logging.info(f"[{rank}] args: {args}")
 logging.info(f"[{rank}] world_size: {world_size}")
 logging.info(f"[{rank}] device: {device}")
 
-# read captions from captions.tsv
-captions_file = "captions.tsv"
-df = pd.read_csv(captions_file, sep='\t')
+logging.info(f"[{rank}] using captions from: {args.captions_fname}")
+df = pd.read_csv(args.captions_fname, sep='\t')
 logging.info(f"[{rank}] {len(df)} captions loaded")
 
 # split captions among ranks
@@ -163,6 +171,7 @@ for index, row in df.iterrows():
         image = pipe(prompt=caption_text,
                      negative_prompt=args.negative_prompt,
                      guidance_scale=args.guidance,
+                     generator=torch.Generator(device=device).manual_seed(args.generator_seed) if args.generator_seed else None,
                      latents=latent_noise,
                      num_inference_steps=args.steps).images[0]
 
