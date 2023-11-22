@@ -40,7 +40,7 @@ python main.py \
     --precision fp16 \     # fp16, bf16 and fp32
     --scheduler euler \
     --steps 20 \
-    --latent-path <PATH TO LATENTS TENSOR FILE>
+    --latent-path latents.pt
 ```
 
 For additional execution options:

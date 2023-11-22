@@ -25,10 +25,10 @@ parser.add_argument('--output-dir-name', default=None, type=str)
 parser.add_argument('--output-dir-name-postfix', default=None, type=str)
 parser.add_argument('--captions-fname', default="captions_5k.tsv", type=str)
 parser.add_argument('--guidance', default=8.0, type=float)
-parser.add_argument('--scheduler', default="ddim", type=str)
+parser.add_argument('--scheduler', default="euler", type=str)
 parser.add_argument('--steps', default=50, type=int)
 parser.add_argument('--negative-prompt', default=None, type=str)
-parser.add_argument('--latent-path',default=None,type=str)
+parser.add_argument('--latent-path',default=None, type=str)
 parser.add_argument('--generator-seed', default=None, type=int)
 parser.add_argument('--resize', default=True, type=bool)
 parser.add_argument("--refiner", dest='refiner', action="store_true",
@@ -88,6 +88,7 @@ if torch.cuda.is_available():
 # load frozen latent
 latent_noise = None
 if args.latent_path:
+    logging.info(f"[{rank}] loading latent from: {args.latent_path}")
     latent_noise = torch.load(args.latent_path).to(dtype)
 
 logging.info(f"[{rank}] args: {args}")
