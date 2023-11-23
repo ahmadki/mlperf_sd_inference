@@ -30,7 +30,6 @@ parser.add_argument('--steps', default=20, type=int)
 parser.add_argument('--negative-prompt', default="normal quality, low quality, worst quality, low res, blurry, nsfw, nude", type=str)
 parser.add_argument('--latent-path', default="latents.pt", type=str)
 parser.add_argument('--generator-seed', default=None, type=int)
-parser.add_argument('--resize', default=True, type=bool)
 parser.add_argument("--refiner", dest='refiner', action="store_true",
                     help="Whether to add a refiner to the SDXL pipeline."
                           "Applicable only with --model-id=xl")
