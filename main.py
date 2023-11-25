@@ -19,7 +19,7 @@ from diffusers import (
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--model-id', default='xl', type=str)
-parser.add_argument('--precision', default='16', type=str)
+parser.add_argument('--precision', default='fp16', type=str)
 parser.add_argument('--base-output-dir', default="./output", type=str)
 parser.add_argument('--output-dir-name', default=None, type=str)
 parser.add_argument('--output-dir-name-postfix', default=None, type=str)
