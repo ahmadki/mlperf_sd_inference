@@ -1,4 +1,10 @@
+# Deprecation notice
+
+This repo is no longer in use or maintained, the benchmark code now lives in the MLCommons inference repo [here](https://github.com/mlcommons/inference/tree/master/text_to_image).
+
 # Stable Diffusion Inference
+
+----------------------------------------------
 
 Welcome to the experimental stable diffusion inference repository. This repository aims to test and evaluate the model as a new benchmark candidate for [MLPerf inference](https://mlcommons.org/en/) .
 
